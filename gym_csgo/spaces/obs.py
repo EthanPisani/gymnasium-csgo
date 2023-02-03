@@ -1,5 +1,5 @@
-# OpenAI gym environments
-import gym
+# gymnasium environments
+import gymnasium as gym
 # Numpy arrays
 import numpy as np
 # Game weapon specifications
@@ -11,7 +11,7 @@ from .enum import Enum
 # Constructs a Counter Strike weapon observation space
 def make_weapon_obs_space():
     # Observation space base components
-    from gym.spaces import Box
+    from gymnasium.spaces import Box
     # Return observation space dictionary
     return gym.spaces.Dict({
         # Name of the weapon
@@ -32,7 +32,7 @@ def make_weapon_obs_space():
 # Constructs a Counter Strike weapon observation space
 def make_obs_space(pov_shape=(640, 480, 3)):
     # Observation space base components
-    from gym.spaces import Box, Discrete
+    from gymnasium.spaces import Box, Discrete
     # Get the weapon observation space
     weapon  = make_weapon_obs_space()
     # Return observation space dictionary

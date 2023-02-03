@@ -1,5 +1,5 @@
-# OpenAI gym environments
-import gym
+#  gymnasium gym environments
+import gymnasium as gym
 
 
 # Constructs a Counter Strike action space

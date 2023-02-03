@@ -1,7 +1,7 @@
 # Sleeping
 from time import sleep
-# OpenAI gym environments
-import gym
+# gymnasium environments
+import gymnasium as gym
 # Show image using OpenCV
 import cv2
 # Virtual display server
@@ -28,7 +28,7 @@ from gym_csgo.spaces.obs import make_obs_space
 class CSGOEnv(gym.core.Env):
     # Initializes Counter-Strike environment
     def __init__(self, width=640, height=480, display_method='Xephyr',
-        display=':99', gsi_path='/csgo-gsi', gsi_port=1234, args=None):
+        display=':99', gsi_path='/csgo-gsi', gsi_port=1234, args=None): #XephyrXvfb
         # Immutable args parameter
         if args is None:
             args = []
@@ -59,9 +59,12 @@ class CSGOEnv(gym.core.Env):
         self.current_obs = None
         # Current game state
         self.current_state = None
+        self.sum_shots=0
 
     # Resets the environment
-    def reset(self):
+    def reset(self,seed=0):
+        # option to add a seed
+        super().reset(seed=seed)
         # Terminate csgo client session
         if self.csgo_session:
             self.csgo_session.terminate()
@@ -78,11 +81,11 @@ class CSGOEnv(gym.core.Env):
         with self.display.activate():
             # Launch new csgo client session
             self.csgo_session = launch_csgo(self.csgo_args)
-        # Get first observation
-        return self._get_obs()
+        # Get info
+        return self._get_info()
 
     # Executes one action step in the environment
-    def step(self, action, wait=None):
+    def step(self, action, wait=1/2):
         # Send action to environment
         self._set_act(action)
         # If specified to wait for some time
@@ -91,19 +94,24 @@ class CSGOEnv(gym.core.Env):
             sleep(wait)
         # Collect new state observation
         obs = self._get_obs()
-        # Return new (state,reward,done,info) tuple
-        return obs, self._get_rew(), self._is_done(), self._get_info()
+        # Return new (state,reward,terminated,truncated,info) tuple
+        # prelimary support for gymnasium by converting to new step API
+        return obs, self._get_rew(), self._is_terminated(), False, self._get_info()
 
     # Closes the environment
     def close(self):
         # Terminate csgo client session
+        print("="*50)
+        print("killing..")
         if self.csgo_session:
-            self.csgo_session.terminate()
+            self.csgo_session.kill()
+        print("killed")
         # Reset input states
         reset_keyboard(self.display.keyboard)
         reset_mouse(self.display.mouse)
         # Close virtual display
         self.display.close()
+        print("done")
 
     # Renders a view of the environment
     def render(self, mode='human'):
@@ -115,7 +123,7 @@ class CSGOEnv(gym.core.Env):
     # Collects new observation from the environment
     def _get_obs(self):
         # Wait for the environment to get ready
-        while not self._is_ready() and not self._is_done():
+        while not self._is_ready() and not self._is_terminated():
             self.current_state = self.gsi.grab()
         # Start with observation dict only containing image observation
         obs = {'pov': self.display.capture()}
@@ -194,7 +202,41 @@ class CSGOEnv(gym.core.Env):
     def _get_rew(self):
         # Difference of scores
         #   TODO: Probably not a good reward function
-        return self.current_obs['score'] - self.last_obs['score']
+
+        # if player is not None and player.weapons is not None:
+        #     # Currently equipped weapon
+        #     if player.weapons.active is not None:
+        #         obs['weapon_active'] = observe_weapon(player.weapons.active[1])
+        #     # Add "None-Weapon" if none equipped
+        #     else:
+        #         obs['weapon_active'] = observe_weapon(None)
+            # Extract weapon slots
+        sum_shots=self.sum_shots
+        try:
+            sum_shots+=self.current_obs[f'weapon_active']['ammo_clip_max'] - self.current_obs[f'weapon_active']['ammo_clip']
+            sum_shots+=self.last_obs[f'weapon_active']['ammo_reserve']- self.current_obs[f'weapon_active']['ammo_reserve']
+        
+            for index in range(NUM_WEAPON_SLOTS):
+                sum_shots+=self.current_obs[f'weapon_{index}']['ammo_clip_max'] - self.current_obs[f'weapon_{index}']['ammo_clip']
+                sum_shots+=self.last_obs[f'weapon_{index}']['ammo_reserve']- self.current_obs[f'weapon_{index}']['ammo_reserve']
+        except:
+            pass
+        self.sum_shots=sum_shots
+        
+        # No weapo
+
+
+        # return self.current_obs['score'] - self.last_obs['score']
+        # shoot = 
+
+        # #current, current
+        #     'ammo_clip_max' - 'ammo_clip'
+        # #current, past
+        #     'ammo_reserve' - self.last_obs['score']
+        try:
+            return self.current_obs['kills'] - 0.5*self.current_obs['deaths'] - 0.02*self.sum_shots
+        except:
+            return self.last_obs['kills'] - 0.5*self.last_obs['deaths'] - 0.02*self.sum_shots
 
     # Gets info useful for debugging
     def _get_info(self):
@@ -218,11 +260,11 @@ class CSGOEnv(gym.core.Env):
         return state is not None and state.map is not None \
             and state.map.phase == 'live' and state.player.activity == 'playing'
 
-    # Tests whether the environment is done
-    def _is_done(self):
+    # Tests whether the environment is terminated
+    def _is_terminated(self):
         # Get current game state
         state = self.current_state
-        # Environment is done, if map phase is 'gameover'
+        # Environment is terminated, if map phase is 'gameover'
         return state is not None and state.map is not None \
             and state.map.phase == 'gameover'
 
